@@ -7,15 +7,21 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   userName: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.large,
-    color: COLORS.secondary,
-  },
-  welcomeMessage: {
     fontFamily: FONT.bold,
     fontSize: SIZES.xLarge,
     color: COLORS.primary,
-    marginTop: 2,
+    marginBottom: SIZES.small / 2,
+  },
+  guestText: {
+    fontFamily: FONT.regular,
+    fontSize: SIZES.medium,
+    color: COLORS.gray,
+  },
+  welcomeMessage: {
+    fontFamily: FONT.medium,
+    fontSize: SIZES.xLarge,
+    color: COLORS.secondary,
+    marginTop: SIZES.small / 2,
   },
   searchContainer: {
     justifyContent: "center",
@@ -58,7 +64,7 @@ const styles = StyleSheet.create({
   },
   tab: (activeJobType, item) => ({
     paddingVertical: SIZES.small / 2,
-    paddingHorizontal: SIZES.small,
+    paddingHorizontal: SIZES.medium,
     borderRadius: SIZES.medium,
     borderWidth: 1,
     borderColor: activeJobType === item ? COLORS.secondary : COLORS.gray2,
