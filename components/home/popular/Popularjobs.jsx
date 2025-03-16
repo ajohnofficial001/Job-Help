@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "expo-router";
 import {
   View,
@@ -16,15 +16,24 @@ import useFetch from "../../../hook/useFetch";
 const Popularjobs = () => {
   const router = useRouter();
   const { data, isLoading, error } = useFetch("search", {
-    query: "Software developer",
+    query: "Software Developer Intern",
     num_pages: "1",
   });
 
   const [selectedJob, setSelectedJob] = useState();
 
+  useEffect(() => {
+    console.log("Data:", data);
+    console.log("Is Loading:", isLoading);
+    console.log("Error:", error);
+  }, [data, isLoading, error]);
+
   const handleCardPress = (item) => {
-    router.push(`/job-details/${item.job_id}`);
-    setSelectedJob(item.job_id);
+    console.log("Selected item =>", item);
+    if (item && item.job_id) {
+      setSelectedJob(item.job_id);
+      router.push(`/job-details/${item.job_id}`);   
+    }
   };
 
   return (
