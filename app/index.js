@@ -119,5 +119,5 @@ const Home = () => {
     </SafeAreaView>
   );
 };
-
+//end of home component
 export default Home;
