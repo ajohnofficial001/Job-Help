@@ -57,7 +57,7 @@ export const sendOpenAIRequest = async (userMessage, conversationHistory = []) =
     const response = await axios.post(
       OPENAI_API_URL,
       {
-        model: "gpt-4", // You can change this to gpt-3.5-turbo for lower cost
+        model: "gpt-4",
         messages,
         temperature: 0.7,
         max_tokens: 500,
