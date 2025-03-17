@@ -45,6 +45,7 @@ const Home = () => {
   }, [user, isLoading])
 
   const toggleChatbot = () => {
+    console.log("Toggling chatbot, current state:", isChatbotVisible)
     setIsChatbotVisible(!isChatbotVisible)
   }
 
@@ -76,27 +77,48 @@ const Home = () => {
           headerShadowVisible: false,
           headerLeft: () => <ScreenHeaderBtn iconUrl={icons.menu} dimension="60%" />,
           headerRight: () => (
-            <TouchableOpacity
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 20,
-                borderWidth: 2,
-                borderColor: COLORS.tertiary,
-                backgroundColor: COLORS.white,
-                overflow: "hidden",
-                ...SHADOWS.small,
-              }}
-              onPress={() => (user ? router.push("/profile") : router.push("/auth/signin"))}
-            >
-              <Image
-                source={profileImageSource}
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <TouchableOpacity
                 style={{
-                  width: "100%",
-                  height: "100%",
+                  marginRight: SIZES.medium,
+                  padding: SIZES.small / 2,
+                  backgroundColor: COLORS.tertiary,
+                  borderRadius: SIZES.small,
                 }}
-              />
-            </TouchableOpacity>
+                onPress={() => router.push("/bookmarks")}
+              >
+                <Image
+                  source={icons.heart}
+                  style={{
+                    width: 20,
+                    height: 20,
+                    tintColor: COLORS.white,
+                  }}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 20,
+                  borderWidth: 2,
+                  borderColor: COLORS.tertiary,
+                  backgroundColor: COLORS.white,
+                  overflow: "hidden",
+                  ...SHADOWS.small,
+                }}
+                onPress={() => (user ? router.push("/profile") : router.push("/auth/signin"))}
+              >
+                <Image
+                  source={profileImageSource}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                  }}
+                />
+              </TouchableOpacity>
+            </View>
           ),
           headerTitle: "",
         }}
@@ -132,3 +154,4 @@ const Home = () => {
 }
 
 export default Home
+
