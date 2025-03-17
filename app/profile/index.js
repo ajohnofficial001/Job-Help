@@ -1,28 +1,35 @@
 import { useState, useEffect } from 'react';
 import { 
   View, 
-  Text, 
   SafeAreaView, 
   ScrollView, 
-  Image, 
-  TouchableOpacity,
-  Switch,
-  TextInput,
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Modal,
-  FlatList
+  TouchableOpacity,
+  Text,
+  Image
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { COLORS, FONT, SIZES, SHADOWS, icons, images } from '../../constants';
+import { COLORS, SIZES, SHADOWS, icons, FONT, images } from '../../constants';
 import { ScreenHeaderBtn } from '../../components';
+import {
+  ProfileHeader,
+  ContactInfo,
+  EducationInfo,
+  BioSection,
+  SkillsSection,
+  ExperienceSection,
+  SettingsSection,
+  SkillsModal,
+  ResumeSection
+} from '../../components/profile';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
 const ProfileScreen = () => {
   const router = useRouter();
-  const { user, signOut, updateProfile, uploadProfilePicture, isLoading } = useAuth();
+  const { user, signOut, updateProfile, uploadProfilePicture, uploadResume, downloadResume, deleteResume, isLoading } = useAuth();
   const { darkMode, colors, toggleDarkMode } = useTheme();
   
   const [isEditing, setIsEditing] = useState(false);
@@ -60,16 +67,63 @@ const ProfileScreen = () => {
     'Time Management', 'Conflict Resolution', 'Negotiation', 'Creative Thinking'
   ];
 
+  // Add a useEffect to log profileData changes
+  useEffect(() => {
+    console.log('Profile data updated:', { 
+      ...profileData, 
+      resume: profileData.resume ? { 
+        ...profileData.resume, 
+        base64: profileData.resume.base64 ? 'base64_content_truncated' : null 
+      } : null 
+    });
+  }, [profileData]);
+
   useEffect(() => {
     // If user data is available from auth context, update profile data
     if (user) {
-      setProfileData(prevData => ({
+      setProfileData(prevData => {
+        // Migrate existing experience data to new format if needed
+        let updatedExperience = user.experience || prevData.experience || [];
+        
+        // Convert any old format experiences to new format
+        updatedExperience = updatedExperience.map(exp => {
+          // If this is an old format experience with duration but no start/end dates
+          if (exp.duration && (!exp.startDate && !exp.endDate)) {
+            // Try to parse duration into start and end dates
+            const durationParts = exp.duration.split(' - ');
+            return {
+              ...exp,
+              startDate: durationParts[0] || '',
+              endDate: durationParts.length > 1 ? durationParts[1] : 'Present',
+              location: exp.location || ''
+            };
+          }
+          
+          // Ensure all experiences have the required fields
+          return {
+            ...exp,
+            startDate: exp.startDate || '',
+            endDate: exp.endDate || '',
+            location: exp.location || '',
+            isBold: exp.isBold || false
+          };
+        });
+        
+        return {
         ...prevData,
         firstName: user.firstName || prevData.firstName,
         lastName: user.lastName || prevData.lastName,
         email: user.email || prevData.email,
-        profilePicture: user.profilePicture || prevData.profilePicture
-      }));
+          phone: user.phone || prevData.phone,
+          location: user.location || prevData.location,
+          bio: user.bio || prevData.bio,
+          education: user.education || prevData.education,
+          skills: user.skills || prevData.skills || [],
+          experience: updatedExperience,
+          profilePicture: user.profilePicture || prevData.profilePicture,
+          resume: user.resume || prevData.resume
+        };
+      });
     } else {
       // If no user is logged in, redirect to sign-in page
       router.replace('/auth/signin');
@@ -83,6 +137,44 @@ const ProfileScreen = () => {
       return;
     }
     
+    // Validate required fields in experiences
+    if (profileData.experience && profileData.experience.length > 0) {
+      // Validate date format for all experiences
+      const validateDateFormat = (date) => {
+        if (!date) return true; // Empty is allowed for end date
+        if (date.toLowerCase() === 'present') return true;
+        
+        const dateRegex = /^(0[1-9]|1[0-2])\/\d{4}$/;
+        return dateRegex.test(date);
+      };
+      
+      // Check for any invalid experiences
+      const invalidExperiences = profileData.experience.filter(exp => {
+        if (!exp.company || !exp.startDate || !exp.location) {
+          return true;
+        }
+        
+        if (!validateDateFormat(exp.startDate)) {
+          return true;
+        }
+        
+        if (exp.endDate && !validateDateFormat(exp.endDate)) {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      if (invalidExperiences.length > 0) {
+        Alert.alert(
+          'Validation Error', 
+          'Please ensure all experiences have valid Company Name, Start Date (MM/YYYY), and Location.'
+        );
+        return;
+      }
+    }
+    
+    try {
     // Save all profile data
     const result = await updateProfile({
       firstName: profileData.firstName,
@@ -93,19 +185,23 @@ const ProfileScreen = () => {
       bio: profileData.bio,
       education: profileData.education,
       skills: profileData.skills,
-      experience: profileData.experience,
-      profilePicture: profileData.profilePicture
+        experience: profileData.experience || [], // Ensure experience is always an array
+        profilePicture: profileData.profilePicture,
+        resume: profileData.resume // Include resume data when saving
     });
 
     if (result.success) {
       setIsEditing(false);
-      Alert.alert('Success', 'Profile updated successfully');
+        Alert.alert('Success', 'Profile updated successfully. All experiences have been saved.');
     } else {
       Alert.alert('Error', result.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred while saving your profile');
     }
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     Alert.alert(
       "Sign Out",
       "Are you sure you want to sign out?",
@@ -116,18 +212,12 @@ const ProfileScreen = () => {
         },
         { 
           text: "Sign Out", 
-          onPress: async () => {
-            try {
-              const result = await signOut();
-              
-              if (result.success) {
+          onPress: () => {
+            // Navigate to sign-in page immediately
                 router.replace('/auth/signin');
-              } else {
-                Alert.alert('Error', result.error || 'Failed to sign out');
-              }
-            } catch (error) {
-              Alert.alert('Error', 'An unexpected error occurred');
-            }
+            
+            // Then perform sign out
+            signOut();
           }
         }
       ]
@@ -183,44 +273,40 @@ const ProfileScreen = () => {
   };
 
   const handleAddExperience = () => {
-    Alert.alert(
-      "Add Experience",
-      "Would you like to add a new work experience?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
-        {
-          text: "Add",
-          onPress: () => {
-            setProfileData({
-              ...profileData,
-              experience: [
-                ...profileData.experience,
-                {
+    // Create a new experience object with a unique ID
+    const newExperience = {
                   id: Date.now().toString(),
                   company: '',
                   position: '',
-                  duration: '',
+      startDate: '',
+      endDate: '',
+      location: '',
                   description: '',
                   isBold: false
-                }
-              ]
-            });
+    };
+    
+    // Update the profile data with the new experience
+    setProfileData(prevData => ({
+      ...prevData,
+      experience: [...(prevData.experience || []), newExperience]
+    }));
+    
+    // Set editing mode to true so user can immediately edit the new experience
             setIsEditing(true);
-          }
-        }
-      ]
-    );
   };
 
   const handleRemoveExperience = (id) => {
+    // Make sure experience array exists
+    if (!profileData.experience || !Array.isArray(profileData.experience)) {
+      return;
+    }
+    
     const updatedExperience = profileData.experience.filter(exp => exp.id !== id);
-    setProfileData({
-      ...profileData,
+    
+    setProfileData(prevData => ({
+      ...prevData,
       experience: updatedExperience
-    });
+    }));
   };
 
   const handleUpdateExperience = (id, field, value) => {
@@ -234,10 +320,10 @@ const ProfileScreen = () => {
       return exp;
     });
     
-    setProfileData({
-      ...profileData,
+    setProfileData(prevData => ({
+      ...prevData,
       experience: updatedExperience
-    });
+    }));
   };
 
   const validatePhoneNumber = (phone) => {
@@ -246,10 +332,77 @@ const ProfileScreen = () => {
     return phoneRegex.test(phone.replace(/\s+/g, ''));
   };
 
-  // Determine the profile image source
-  const profileImageSource = profileData.profilePicture 
-    ? { uri: profileData.profilePicture } 
-    : images.profile;
+  // Handle resume upload
+  const handleUploadResume = async () => {
+    console.log('Starting resume upload...');
+    const result = await uploadResume();
+    console.log('Upload resume result:', result);
+    
+    if (result.success) {
+      console.log('Resume upload successful, updating profile data...');
+      console.log('Current user after upload:', { 
+        ...user, 
+        resume: user.resume ? { ...user.resume, base64: 'base64_content_truncated' } : null 
+      });
+      
+      // Update the local profileData state with the updated user data
+      if (user && user.resume) {
+        console.log('User has resume, updating profileData...');
+        setProfileData(prevData => {
+          const updatedData = {
+            ...prevData,
+            resume: user.resume
+          };
+          console.log('Updated profile data:', { 
+            ...updatedData, 
+            resume: { ...updatedData.resume, base64: 'base64_content_truncated' } 
+          });
+          return updatedData;
+        });
+      } else {
+        console.log('User does not have resume after upload!');
+      }
+    } else {
+      console.log('Resume upload failed:', result.error);
+    }
+  };
+  
+  // Handle resume download
+  const handleDownloadResume = async () => {
+    const result = await downloadResume();
+    if (!result.success) {
+      // The downloadResume function already shows error messages
+      // No need for additional error handling here
+    }
+  };
+  
+  // Handle resume deletion
+  const handleDeleteResume = async () => {
+    Alert.alert(
+      "Delete Resume",
+      "Are you sure you want to delete your resume?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel"
+        },
+        { 
+          text: "Delete", 
+          onPress: async () => {
+            const result = await deleteResume();
+            if (result.success) {
+              // Update the local profileData state to remove the resume
+              setProfileData(prevData => {
+                const { resume, ...dataWithoutResume } = prevData;
+                return dataWithoutResume;
+              });
+            }
+          },
+          style: "destructive"
+        }
+      ]
+    );
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: darkMode ? colors.background : COLORS.lightWhite }}>
@@ -269,7 +422,7 @@ const ProfileScreen = () => {
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
               <TouchableOpacity 
-                style={[styles.headerButton, { marginRight: 10 }]}
+                style={styles.headerButton}
                 onPress={toggleDarkMode}
               >
                 <Text style={styles.headerButtonText}>
@@ -277,7 +430,7 @@ const ProfileScreen = () => {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.headerButton}
+                style={[styles.headerButton, { marginLeft: 10 }]}
                 onPress={() => isEditing ? handleSaveProfile() : setIsEditing(true)}
                 disabled={isLoading}
               >
@@ -285,7 +438,7 @@ const ProfileScreen = () => {
                   <ActivityIndicator color={COLORS.white} size="small" />
                 ) : (
                   <Text style={styles.headerButtonText}>
-                    {isEditing ? 'Save' : 'Edit'}
+                    {isEditing ? '💾' : '✏️'}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -297,6 +450,7 @@ const ProfileScreen = () => {
 
       <ScrollView 
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
         style={{ backgroundColor: darkMode ? colors.background : COLORS.lightWhite }}
       >
         <View style={[
@@ -304,642 +458,103 @@ const ProfileScreen = () => {
           { backgroundColor: darkMode ? colors.background : COLORS.lightWhite }
         ]}>
           {/* Profile Header */}
-          <View style={styles.profileHeader}>
-            <TouchableOpacity 
-              style={styles.profileImageContainer}
-              onPress={handleUploadPhoto}
-            >
-              <Image 
-                source={profileImageSource} 
-                style={styles.profileImage}
-              />
-              <View style={styles.uploadIconContainer}>
-                <Text style={styles.uploadIcon}>📷</Text>
-              </View>
-            </TouchableOpacity>
-            {isEditing ? (
-              <View style={styles.nameInputContainer}>
-                <TextInput
-                  style={[
-                    styles.nameInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.firstName}
-                  onChangeText={(text) => setProfileData({...profileData, firstName: text})}
-                  placeholder="First Name"
-                  placeholderTextColor={darkMode ? colors.textSecondary : COLORS.gray}
-                />
-                <TextInput
-                  style={[
-                    styles.nameInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.lastName}
-                  onChangeText={(text) => setProfileData({...profileData, lastName: text})}
-                  placeholder="Last Name"
-                  placeholderTextColor={darkMode ? colors.textSecondary : COLORS.gray}
-                />
-              </View>
-            ) : (
-              <Text style={[
-                styles.profileName,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                {profileData.firstName} {profileData.lastName}
-              </Text>
-            )}
-            <Text style={[
-              styles.profileLocation,
-              { color: darkMode ? colors.textSecondary : COLORS.gray }
-            ]}>
-              <Image 
-                source={icons.location} 
-                style={[
-                  styles.locationIcon,
-                  { tintColor: darkMode ? colors.textSecondary : COLORS.gray }
-                ]} 
-              />
-              {' '}{profileData.location}
-            </Text>
-          </View>
+          <ProfileHeader 
+            profileData={profileData}
+            setProfileData={setProfileData}
+            isEditing={isEditing}
+            handleUploadPhoto={handleUploadPhoto}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
-          {/* Profile Info */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                Contact Information
-              </Text>
-              {!isEditing && (
-                <TouchableOpacity 
-                  style={styles.editButton}
-                  onPress={() => setIsEditing(true)}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Email:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.email}
-                  onChangeText={(text) => setProfileData({...profileData, email: text})}
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.email || 'Add your email'}
-                </Text>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Phone:
-              </Text>
-              {isEditing ? (
-                <View style={{ width: '70%' }}>
-                  <TextInput
-                    style={[
-                      styles.infoInput,
-                      { 
-                        color: darkMode ? colors.text : COLORS.primary,
-                        borderColor: validatePhoneNumber(profileData.phone) || !profileData.phone ? 
-                          COLORS.gray2 : COLORS.tertiary
-                      }
-                    ]}
-                    value={profileData.phone}
-                    onChangeText={(text) => setProfileData({...profileData, phone: text})}
-                    keyboardType="phone-pad"
-                    placeholder="e.g. +1 (555) 123-4567"
-                  />
-                  {profileData.phone && !validatePhoneNumber(profileData.phone) && (
-                    <Text style={styles.errorText}>Please enter a valid phone number</Text>
-                  )}
-                </View>
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.phone || 'Add your phone number'}
-                </Text>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Location:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.location}
-                  onChangeText={(text) => setProfileData({...profileData, location: text})}
-                  placeholder="e.g. New York, NY"
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.location || 'Add your location'}
-                </Text>
-              )}
-            </View>
-          </View>
+          {/* Contact Info */}
+          <ContactInfo 
+            profileData={profileData}
+            setProfileData={setProfileData}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            validatePhoneNumber={validatePhoneNumber}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
           {/* Education */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                Education
-              </Text>
-              {!isEditing && (
-                <TouchableOpacity 
-                  style={styles.editButton}
-                  onPress={() => setIsEditing(true)}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                School:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.education.school}
-                  onChangeText={(text) => setProfileData({
-                    ...profileData, 
-                    education: {...profileData.education, school: text}
-                  })}
-                  placeholder="e.g. University of California"
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.education.school || 'Add your school'}
-                </Text>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Major:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.education.major}
-                  onChangeText={(text) => setProfileData({
-                    ...profileData, 
-                    education: {...profileData.education, major: text}
-                  })}
-                  placeholder="e.g. Computer Science"
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.education.major || 'Add your major'}
-                </Text>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Classification:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.education.classification}
-                  onChangeText={(text) => setProfileData({
-                    ...profileData, 
-                    education: {...profileData.education, classification: text}
-                  })}
-                  placeholder="e.g. Senior, Junior, Sophomore"
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.education.classification || 'Add your classification'}
-                </Text>
-              )}
-            </View>
-            <View style={styles.infoItem}>
-              <Text style={[
-                styles.infoLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Graduation:
-              </Text>
-              {isEditing ? (
-                <TextInput
-                  style={[
-                    styles.infoInput,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}
-                  value={profileData.education.graduationYear}
-                  onChangeText={(text) => setProfileData({
-                    ...profileData, 
-                    education: {...profileData.education, graduationYear: text}
-                  })}
-                  placeholder="e.g. 2024"
-                  keyboardType="number-pad"
-                />
-              ) : (
-                <Text style={[
-                  styles.infoValue,
-                  { color: darkMode ? colors.text : COLORS.primary }
-                ]}>
-                  {profileData.education.graduationYear || 'Add graduation year'}
-                </Text>
-              )}
-            </View>
-          </View>
+          <EducationInfo 
+            profileData={profileData}
+            setProfileData={setProfileData}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
           {/* Bio */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                About Me
-              </Text>
-              {!isEditing && (
-                <TouchableOpacity 
-                  style={styles.editButton}
-                  onPress={() => setIsEditing(true)}
-                >
-                  <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {isEditing ? (
-              <TextInput
-                style={[
-                  styles.bioInput,
-                  { 
-                    color: darkMode ? colors.text : COLORS.secondary,
-                    borderColor: darkMode ? colors.textSecondary : COLORS.gray2
-                  }
-                ]}
-                value={profileData.bio}
-                onChangeText={(text) => setProfileData({...profileData, bio: text})}
-                multiline
-                placeholder="Tell us about yourself..."
-              />
-            ) : (
-              <Text style={[
-                styles.bioText,
-                { color: darkMode ? colors.text : COLORS.secondary }
-              ]}>
-                {profileData.bio || 'Add information about yourself'}
-              </Text>
-            )}
-          </View>
+          <BioSection 
+            profileData={profileData}
+            setProfileData={setProfileData}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
           {/* Skills */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                Skills
-              </Text>
-              <TouchableOpacity 
-                style={styles.editButton}
-                onPress={handleAddSkill}
-              >
-                <Text style={styles.editButtonText}>Add Skill</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.skillsContainer}>
-              {profileData.skills.length > 0 ? (
-                profileData.skills.map((skill, index) => (
-                  <View key={index} style={[
-                    styles.skillBadge,
-                    { backgroundColor: darkMode ? COLORS.tertiary + '40' : COLORS.tertiary + '20' }
-                  ]}>
-                    <Text style={styles.skillText}>{skill}</Text>
-                    {isEditing && (
-                      <TouchableOpacity 
-                        style={styles.removeButton}
-                        onPress={() => handleRemoveSkill(index)}
-                      >
-                        <Text style={styles.removeButtonText}>×</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
-              ) : (
-                <Text style={[
-                  styles.emptyText,
-                  { color: darkMode ? colors.textSecondary : COLORS.gray }
-                ]}>
-                  Add your skills to showcase your abilities
-                </Text>
-              )}
-            </View>
-          </View>
+          <SkillsSection 
+            profileData={profileData}
+            isEditing={isEditing}
+            handleAddSkill={handleAddSkill}
+            handleRemoveSkill={handleRemoveSkill}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
           {/* Experience */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <View style={styles.sectionHeader}>
-              <Text style={[
-                styles.sectionTitle,
-                { color: darkMode ? colors.text : COLORS.primary }
-              ]}>
-                Experience
-              </Text>
-              <TouchableOpacity 
-                style={styles.editButton}
-                onPress={handleAddExperience}
-              >
-                <Text style={styles.editButtonText}>Add Experience</Text>
-              </TouchableOpacity>
-            </View>
-            {profileData.experience.length > 0 ? (
-              profileData.experience.map((exp) => (
-                <View key={exp.id} style={[
-                  styles.experienceItem,
-                  { borderBottomColor: darkMode ? colors.textSecondary : COLORS.gray2 }
-                ]}>
-                  {isEditing ? (
-                    <>
-                      <TextInput
-                        style={[
-                          styles.experienceInput,
-                          { color: darkMode ? colors.text : COLORS.primary }
-                        ]}
-                        value={exp.company}
-                        onChangeText={(text) => handleUpdateExperience(exp.id, 'company', text)}
-                        placeholder="Company name"
-                      />
-                      <TextInput
-                        style={[
-                          styles.experienceInput,
-                          { color: darkMode ? colors.textSecondary : COLORS.secondary }
-                        ]}
-                        value={exp.position}
-                        onChangeText={(text) => handleUpdateExperience(exp.id, 'position', text)}
-                        placeholder="Position"
-                      />
-                      <TextInput
-                        style={[
-                          styles.experienceInput,
-                          { color: darkMode ? colors.textSecondary : COLORS.gray }
-                        ]}
-                        value={exp.duration}
-                        onChangeText={(text) => handleUpdateExperience(exp.id, 'duration', text)}
-                        placeholder="Duration (e.g. 2020 - Present)"
-                      />
-                      <TextInput
-                        style={[
-                          styles.experienceDescription,
-                          { 
-                            color: darkMode ? colors.text : COLORS.primary,
-                            borderColor: darkMode ? colors.textSecondary : COLORS.gray2
-                          }
-                        ]}
-                        value={exp.description}
-                        onChangeText={(text) => handleUpdateExperience(exp.id, 'description', text)}
-                        placeholder="Add bullet points for your responsibilities and achievements..."
-                        multiline
-                        numberOfLines={4}
-                      />
-                      <View style={styles.experienceActions}>
-                        <TouchableOpacity 
-                          style={styles.removeExperienceButton}
-                          onPress={() => handleRemoveExperience(exp.id)}
-                        >
-                          <Text style={styles.removeButtonText}>Remove</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          style={styles.boldButton}
-                          onPress={() => handleUpdateExperience(exp.id, 'isBold', !exp.isBold)}
-                        >
-                          <Text style={styles.boldButtonText}>Bold</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={[
-                        styles.companyName,
-                        { color: darkMode ? colors.text : COLORS.primary }
-                      ]}>
-                        {exp.company || 'Company name'}
-                      </Text>
-                      <Text style={[
-                        styles.positionText,
-                        { color: darkMode ? colors.textSecondary : COLORS.secondary }
-                      ]}>
-                        {exp.position || 'Position'}
-                      </Text>
-                      <Text style={[
-                        styles.durationText,
-                        { color: darkMode ? colors.textSecondary : COLORS.gray }
-                      ]}>
-                        {exp.duration || 'Duration'}
-                      </Text>
-                      {exp.description && (
-                        <Text style={[
-                          styles.descriptionText,
-                          exp.isBold && styles.boldText,
-                          { color: darkMode ? colors.text : COLORS.primary }
-                        ]}>
-                          {exp.description}
-                        </Text>
-                      )}
-                    </>
-                  )}
-                </View>
-              ))
-            ) : (
-              <Text style={[
-                styles.emptyText,
-                { color: darkMode ? colors.textSecondary : COLORS.gray }
-              ]}>
-                Add your work experience
-              </Text>
-            )}
-          </View>
+          <ExperienceSection 
+            profileData={profileData}
+            isEditing={isEditing}
+            handleAddExperience={handleAddExperience}
+            handleRemoveExperience={handleRemoveExperience}
+            handleUpdateExperience={handleUpdateExperience}
+            darkMode={darkMode}
+            colors={colors}
+          />
+
+          {/* Resume Section */}
+          <ResumeSection 
+            profileData={profileData}
+            isEditing={isEditing}
+            handleUploadResume={handleUploadResume}
+            handleDownloadResume={handleDownloadResume}
+            handleDeleteResume={handleDeleteResume}
+            isLoading={isLoading}
+            darkMode={darkMode}
+            colors={colors}
+          />
 
           {/* Settings */}
-          <View style={[
-            styles.section,
-            { backgroundColor: darkMode ? colors.surface : COLORS.white }
-          ]}>
-            <Text style={[
-              styles.sectionTitle,
-              { color: darkMode ? colors.text : COLORS.primary }
-            ]}>
-              Settings
-            </Text>
-            
-            <View style={styles.settingItem}>
-              <Text style={[
-                styles.settingLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Push Notifications
-              </Text>
-              <Switch
-                trackColor={{ false: COLORS.gray2, true: COLORS.tertiary }}
-                thumbColor={notificationsEnabled ? COLORS.lightWhite : COLORS.white}
-                onValueChange={() => setNotificationsEnabled(!notificationsEnabled)}
-                value={notificationsEnabled}
-              />
-            </View>
-            
-            <View style={styles.settingItem}>
-              <Text style={[
-                styles.settingLabel,
-                { color: darkMode ? colors.textSecondary : COLORS.secondary }
-              ]}>
-                Dark Mode
-              </Text>
-              <Switch
-                trackColor={{ false: COLORS.gray2, true: COLORS.tertiary }}
-                thumbColor={darkMode ? COLORS.lightWhite : COLORS.white}
-                onValueChange={toggleDarkMode}
-                value={darkMode}
-              />
-            </View>
-
-            <TouchableOpacity 
-              style={[styles.logoutButton, { backgroundColor: COLORS.tertiary }]}
-              onPress={handleSignOut}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <Text style={styles.logoutButtonText}>Sign Out</Text>
-              )}
-            </TouchableOpacity>
-          </View>
+          <SettingsSection 
+            notificationsEnabled={notificationsEnabled}
+            setNotificationsEnabled={setNotificationsEnabled}
+            darkMode={darkMode}
+            toggleDarkMode={toggleDarkMode}
+            handleSignOut={handleSignOut}
+            isLoading={isLoading}
+            colors={colors}
+          />
         </View>
       </ScrollView>
 
       {/* Skills Modal */}
-      <Modal
-        visible={showSkillsModal}
-        animationType="slide"
-        transparent={true}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: darkMode ? colors.surface : COLORS.white }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: darkMode ? colors.text : COLORS.primary }]}>
-                Select Skills
-              </Text>
-              <TouchableOpacity onPress={() => setShowSkillsModal(false)}>
-                <Text style={styles.closeButton}>×</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <FlatList
-              data={availableSkills}
-              keyExtractor={(item) => item}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.skillItem,
-                    selectedSkills.includes(item) && styles.selectedSkillItem,
-                    { backgroundColor: darkMode ? colors.surface : COLORS.white }
-                  ]}
-                  onPress={() => handleSkillSelection(item)}
-                >
-                  <Text style={[
-                    styles.skillItemText,
-                    { color: darkMode ? colors.text : COLORS.primary }
-                  ]}>
-                    {item}
-                  </Text>
-                  {selectedSkills.includes(item) && (
-                    <Text style={styles.checkmark}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-            />
-            
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveSkills}
-            >
-              <Text style={styles.saveButtonText}>Save Skills</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <SkillsModal 
+        showSkillsModal={showSkillsModal}
+        setShowSkillsModal={setShowSkillsModal}
+        availableSkills={availableSkills}
+        selectedSkills={selectedSkills}
+        handleSkillSelection={handleSkillSelection}
+        handleSaveSkills={handleSaveSkills}
+        darkMode={darkMode}
+        colors={colors}
+      />
     </SafeAreaView>
   );
 };
@@ -948,196 +563,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: SIZES.medium,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: SIZES.large,
-  },
-  profileImageContainer: {
-    position: 'relative',
-    marginBottom: SIZES.medium,
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: COLORS.tertiary,
-  },
-  uploadIconContainer: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: COLORS.white,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.tertiary,
-  },
-  uploadIcon: {
-    fontSize: 20,
-  },
-  nameInputContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-    marginBottom: SIZES.small / 2,
-  },
-  profileName: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.xLarge,
-    color: COLORS.primary,
-    marginBottom: SIZES.small / 2,
-  },
-  nameInput: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.large,
-    color: COLORS.primary,
-    marginBottom: SIZES.small / 2,
-    textAlign: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray2,
-    paddingBottom: 5,
-    width: '40%',
-    marginHorizontal: 5,
-  },
-  profileLocation: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.gray,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  locationIcon: {
-    width: 14,
-    height: 14,
-    tintColor: COLORS.gray,
-  },
-  section: {
-    marginBottom: SIZES.large,
-    padding: SIZES.medium,
-    backgroundColor: COLORS.white,
-    borderRadius: SIZES.small,
-    ...SHADOWS.medium,
-  },
-  sectionTitle: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.large,
-    color: COLORS.primary,
-    marginBottom: SIZES.medium,
-  },
-  infoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SIZES.small,
-  },
-  infoLabel: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.medium,
-    color: COLORS.secondary,
-    width: '30%',
-  },
-  infoValue: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.primary,
-    width: '70%',
-  },
-  infoInput: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.primary,
-    width: '70%',
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray2,
-    paddingBottom: 5,
-  },
-  bioText: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.secondary,
-    lineHeight: 22,
-  },
-  bioInput: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.secondary,
-    lineHeight: 22,
-    borderWidth: 1,
-    borderColor: COLORS.gray2,
-    borderRadius: SIZES.small,
-    padding: SIZES.small,
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  skillsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  skillBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.tertiary + '20',
-    paddingHorizontal: SIZES.medium,
-    paddingVertical: SIZES.small / 2,
-    borderRadius: SIZES.medium,
-    marginRight: SIZES.small,
-    marginBottom: SIZES.small,
-  },
-  skillText: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.small,
-    color: COLORS.tertiary,
-  },
-  experienceItem: {
-    marginBottom: SIZES.medium,
-    paddingBottom: SIZES.small,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray2,
-  },
-  companyName: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.medium,
-    color: COLORS.primary,
-    marginBottom: 2,
-  },
-  positionText: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.medium,
-    color: COLORS.secondary,
-    marginBottom: 2,
-  },
-  durationText: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.small,
-    color: COLORS.gray,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SIZES.medium,
-  },
-  settingLabel: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.medium,
-    color: COLORS.secondary,
-  },
-  logoutButton: {
-    backgroundColor: COLORS.tertiary,
-    padding: SIZES.medium,
-    borderRadius: SIZES.small,
-    alignItems: 'center',
-    marginTop: SIZES.medium,
-  },
-  logoutButtonText: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.medium,
-    color: COLORS.white,
   },
   headerButton: {
     paddingHorizontal: SIZES.medium,
@@ -1149,161 +574,6 @@ const styles = StyleSheet.create({
     fontFamily: FONT.bold,
     fontSize: SIZES.small,
     color: COLORS.white,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SIZES.medium,
-  },
-  editButton: {
-    backgroundColor: COLORS.tertiary + '20',
-    paddingHorizontal: SIZES.small,
-    paddingVertical: SIZES.small / 2,
-    borderRadius: SIZES.small,
-  },
-  editButtonText: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.small,
-    color: COLORS.tertiary,
-  },
-  emptyText: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    color: COLORS.gray,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginVertical: SIZES.small,
-  },
-  removeButton: {
-    marginLeft: SIZES.small / 2,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.tertiary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeButtonText: {
-    color: COLORS.white,
-    fontSize: SIZES.small,
-    fontWeight: 'bold',
-  },
-  removeExperienceButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: COLORS.tertiary + '20',
-    paddingHorizontal: SIZES.small,
-    paddingVertical: SIZES.small / 2,
-    borderRadius: SIZES.small,
-    marginTop: SIZES.small,
-  },
-  experienceInput: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray2,
-    paddingBottom: 5,
-    marginBottom: SIZES.small / 2,
-  },
-  errorText: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.small,
-    color: COLORS.tertiary,
-    marginTop: SIZES.small,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  modalContent: {
-    width: '90%',
-    maxHeight: '80%',
-    borderRadius: SIZES.medium,
-    padding: SIZES.medium,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SIZES.medium,
-  },
-  modalTitle: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.large,
-    color: COLORS.primary,
-  },
-  closeButton: {
-    fontSize: SIZES.xLarge,
-    color: COLORS.tertiary,
-  },
-  skillItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: SIZES.medium,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray2,
-  },
-  selectedSkillItem: {
-    backgroundColor: COLORS.tertiary + '20',
-  },
-  skillItemText: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.medium,
-    color: COLORS.primary,
-  },
-  checkmark: {
-    color: COLORS.tertiary,
-    fontSize: SIZES.large,
-  },
-  saveButton: {
-    backgroundColor: COLORS.tertiary,
-    padding: SIZES.medium,
-    borderRadius: SIZES.small,
-    alignItems: 'center',
-    marginTop: SIZES.medium,
-  },
-  saveButtonText: {
-    fontFamily: FONT.bold,
-    fontSize: SIZES.medium,
-    color: COLORS.white,
-  },
-  experienceDescription: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    borderWidth: 1,
-    borderRadius: SIZES.small,
-    padding: SIZES.small,
-    marginTop: SIZES.small,
-    textAlignVertical: 'top',
-    height: 100,
-  },
-  experienceActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: SIZES.small,
-  },
-  boldButton: {
-    backgroundColor: COLORS.tertiary + '20',
-    paddingHorizontal: SIZES.small,
-    paddingVertical: SIZES.small / 2,
-    borderRadius: SIZES.small,
-    marginLeft: SIZES.small,
-  },
-  boldButtonText: {
-    fontFamily: FONT.medium,
-    fontSize: SIZES.small,
-    color: COLORS.tertiary,
-  },
-  descriptionText: {
-    fontFamily: FONT.regular,
-    fontSize: SIZES.medium,
-    marginTop: SIZES.small,
-  },
-  boldText: {
-    fontFamily: FONT.bold,
   },
 });
 
