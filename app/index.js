@@ -67,7 +67,7 @@ const Home = () => {
   // Determine the profile image source
   const profileImageSource = user?.profilePicture
     ? { uri: user.profilePicture }
-    : { uri: "https://via.placeholder.com/100?text=Upload+Photo" }
+    : { uri: "https://static.vecteezy.com/system/resources/previews/021/548/095/non_2x/default-profile-picture-avatar-user-avatar-icon-person-icon-head-icon-profile-picture-icons-default-anonymous-user-male-and-female-businessman-photo-placeholder-social-network-avatar-portrait-free-vector.jpg" }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: darkMode ? colors.background : COLORS.lightWhite }}>

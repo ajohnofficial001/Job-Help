@@ -1,5 +1,5 @@
 import axios from "axios"
-import { OPENAI_API_KEY } from "@env"
+//import { OPENAI_API_KEY } from "@env"
 
 // Constants
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
