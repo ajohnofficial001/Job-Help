@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { View, Text, TouchableOpacity, Image, StyleSheet, Alert, TextInput, Modal, Platform } from "react-native"
+import { View, Text, TouchableOpacity, Image, StyleSheet, TextInput, Modal, Platform } from "react-native"
 import { useRouter } from "expo-router"
 import { COLORS, FONT, SIZES, SHADOWS, icons } from "../../constants"
 import { useBookmarks } from "../../context/BookmarkContext"
@@ -27,6 +27,14 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
   const [isDatePickerVisible, setDatePickerVisible] = useState(false)
   const [showWebDateModal, setShowWebDateModal] = useState(false)
   const [webDate, setWebDate] = useState("")
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [showMoveToActiveModal, setShowMoveToActiveModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
+  const [showErrorModal, setShowErrorModal] = useState(false)
 
   // Format date
   const formatDate = (dateString) => {
@@ -54,107 +62,89 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
 
   // Handle remove bookmark
   const handleRemove = () => {
-    if (Platform.OS === "web") {
-      if (confirm("Are you sure you want to remove this job from your bookmarks?")) {
-        removeBookmark(job.job_id)
+    setShowRemoveModal(true)
+  }
+
+  const confirmRemove = async () => {
+    try {
+      const result = await removeBookmark(job.job_id)
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to remove job")
+        setShowErrorModal(true)
+      } else {
+        setSuccessMessage("Job removed successfully")
+        setShowSuccessModal(true)
       }
-    } else {
-      Alert.alert("Remove Job", "Are you sure you want to remove this job from your bookmarks?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            const result = await removeBookmark(job.job_id)
-            if (!result.success) {
-              Alert.alert("Error", result.error || "Failed to remove job")
-            }
-          },
-        },
-      ])
+    } catch (error) {
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
+    } finally {
+      setShowRemoveModal(false)
     }
   }
 
   // Handle mark as completed
   const handleMarkAsCompleted = () => {
-    if (Platform.OS === "web") {
-      if (confirm("Have you completed this application?")) {
-        markAsCompleted(job.job_id)
+    setShowCompleteModal(true)
+  }
+
+  const confirmMarkAsCompleted = async () => {
+    try {
+      const result = await markAsCompleted(job.job_id)
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to mark as completed")
+        setShowErrorModal(true)
+      } else {
+        setSuccessMessage("Job marked as completed")
+        setShowSuccessModal(true)
       }
-    } else {
-      Alert.alert("Mark as Completed", "Have you completed this application?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Yes, Complete",
-          onPress: async () => {
-            const result = await markAsCompleted(job.job_id)
-            if (!result.success) {
-              Alert.alert("Error", result.error || "Failed to mark as completed")
-            }
-          },
-        },
-      ])
+    } catch (error) {
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
+    } finally {
+      setShowCompleteModal(false)
     }
   }
 
   // Handle move to active
   const handleMoveToActive = () => {
-    if (Platform.OS === "web") {
-      if (confirm("Do you want to move this application back to active?")) {
-        moveToActive(job.job_id)
+    setShowMoveToActiveModal(true)
+  }
+
+  const confirmMoveToActive = async () => {
+    try {
+      const result = await moveToActive(job.job_id)
+      if (!result.success) {
+        setErrorMessage(result.error || "Failed to move to active")
+        setShowErrorModal(true)
+      } else {
+        setSuccessMessage("Job moved to active applications")
+        setShowSuccessModal(true)
       }
-    } else {
-      Alert.alert("Move to Active", "Do you want to move this application back to active?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Move to Active",
-          onPress: async () => {
-            const result = await moveToActive(job.job_id)
-            if (!result.success) {
-              Alert.alert("Error", result.error || "Failed to move to active")
-            }
-          },
-        },
-      ])
+    } catch (error) {
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
+    } finally {
+      setShowMoveToActiveModal(false)
     }
   }
 
   // Handle update status
   const handleUpdateStatus = () => {
     if (!isActive) return
-
-    const statusOptions = ["Saved", "Applied", "Interviewing", "Offer", "Rejected"]
-
-    if (Platform.OS === "web") {
-      const status = prompt(
-        "Select the current status of your application:\n" + "Options: Saved, Applied, Interviewing, Offer, Rejected",
-        job.application_status,
-      )
-
-      if (status && statusOptions.includes(status)) {
-        updateStatus(status)
-      }
-    } else {
-      Alert.alert("Update Status", "Select the current status of your application", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Saved", onPress: () => updateStatus("Saved") },
-        { text: "Applied", onPress: () => updateStatus("Applied") },
-        { text: "Interviewing", onPress: () => updateStatus("Interviewing") },
-        { text: "Offer", onPress: () => updateStatus("Offer") },
-        { text: "Rejected", onPress: () => updateStatus("Rejected") },
-      ])
-    }
+    setShowStatusModal(true)
   }
 
   // Update application status
   const updateStatus = async (status) => {
+    setShowStatusModal(false)
     const result = await updateBookmark(job.job_id, { application_status: status })
     if (!result.success) {
-      if (Platform.OS === "web") {
-        alert("Failed to update status")
-      } else {
-        Alert.alert("Error", result.error || "Failed to update status")
-      }
+      setErrorMessage(result.error || "Failed to update status")
+      setShowErrorModal(true)
+    } else {
+      setSuccessMessage(`Status updated to ${status}`)
+      setShowSuccessModal(true)
     }
   }
 
@@ -178,7 +168,11 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
 
     const result = await updateBookmark(job.job_id, { deadline: date.toISOString() })
     if (!result.success) {
-      Alert.alert("Error", result.error || "Failed to update deadline")
+      setErrorMessage(result.error || "Failed to update deadline")
+      setShowErrorModal(true)
+    } else {
+      setSuccessMessage("Deadline updated successfully")
+      setShowSuccessModal(true)
     }
   }
 
@@ -203,11 +197,16 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
       console.log("Update result:", result)
 
       if (!result.success) {
-        window.alert("Failed to update deadline")
+        setErrorMessage("Failed to update deadline")
+        setShowErrorModal(true)
+      } else {
+        setSuccessMessage("Deadline updated successfully")
+        setShowSuccessModal(true)
       }
     } catch (error) {
       console.error("Error updating deadline:", error)
-      window.alert("Invalid date format")
+      setErrorMessage("Invalid date format")
+      setShowErrorModal(true)
     }
   }
 
@@ -215,12 +214,13 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
   const clearDeadline = async () => {
     const result = await updateBookmark(job.job_id, { deadline: null })
     if (!result.success) {
-      if (Platform.OS === "web") {
-        alert("Failed to clear deadline")
-      } else {
-        Alert.alert("Error", result.error || "Failed to clear deadline")
-      }
+      setErrorMessage("Failed to clear deadline")
+      setShowErrorModal(true)
+    } else {
+      setSuccessMessage("Deadline cleared")
+      setShowSuccessModal(true)
     }
+    setShowWebDateModal(false)
   }
 
   return (
@@ -344,53 +344,217 @@ const BookmarkedJobCard = ({ job, darkMode, colors, isActive }) => {
       )}
 
       {/* Web Modal for date input */}
-      {Platform.OS === "web" && (
-        <Modal
-          visible={showWebDateModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowWebDateModal(false)}
-        >
-          <View style={webStyles.modalOverlay}>
-            <View style={webStyles.modalContent}>
-              <Text style={webStyles.modalTitle}>Set Application Deadline</Text>
+      <Modal
+        visible={showWebDateModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowWebDateModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Set Application Deadline</Text>
 
-              <Text style={webStyles.label}>Deadline Date</Text>
-              <TextInput
-                style={webStyles.input}
-                placeholder="YYYY-MM-DD"
-                value={webDate}
-                onChangeText={setWebDate}
-                // On web, use the native date input
-                {...(Platform.OS === "web" ? { type: "date" } : {})}
-              />
+            <Text style={modalStyles.label}>Deadline Date</Text>
+            <TextInput
+              style={modalStyles.input}
+              placeholder="YYYY-MM-DD"
+              value={webDate}
+              onChangeText={setWebDate}
+              // On web, use the native date input
+              {...(Platform.OS === "web" ? { type: "date" } : {})}
+            />
 
-              <View style={webStyles.buttonContainer}>
-                <TouchableOpacity
-                  style={[webStyles.button, webStyles.clearButton]}
-                  onPress={() => {
-                    setShowWebDateModal(false)
-                    clearDeadline()
-                  }}
-                >
-                  <Text style={webStyles.buttonText}>Clear Deadline</Text>
-                </TouchableOpacity>
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity style={[modalStyles.button, modalStyles.clearButton]} onPress={clearDeadline}>
+                <Text style={modalStyles.buttonText}>Clear Deadline</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[webStyles.button, webStyles.cancelButton]}
-                  onPress={() => setShowWebDateModal(false)}
-                >
-                  <Text style={webStyles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowWebDateModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity style={[webStyles.button, webStyles.saveButton]} onPress={handleWebDateSubmit}>
-                  <Text style={webStyles.buttonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={[modalStyles.button, modalStyles.saveButton]} onPress={handleWebDateSubmit}>
+                <Text style={modalStyles.buttonText}>Save</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
+
+      {/* Status Update Modal */}
+      <Modal
+        visible={showStatusModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowStatusModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Update Application Status</Text>
+            <Text style={modalStyles.modalText}>Select the current status of your application:</Text>
+
+            <View style={modalStyles.statusButtonsContainer}>
+              <TouchableOpacity style={modalStyles.statusButton} onPress={() => updateStatus("Saved")}>
+                <Text style={modalStyles.statusButtonText}>Saved</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={modalStyles.statusButton} onPress={() => updateStatus("Applied")}>
+                <Text style={modalStyles.statusButtonText}>Applied</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={modalStyles.statusButton} onPress={() => updateStatus("Interviewing")}>
+                <Text style={modalStyles.statusButtonText}>Interviewing</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={modalStyles.statusButton} onPress={() => updateStatus("Offer")}>
+                <Text style={modalStyles.statusButtonText}>Offer</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={modalStyles.statusButton} onPress={() => updateStatus("Rejected")}>
+                <Text style={modalStyles.statusButtonText}>Rejected</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.cancelButton, { marginTop: 20 }]}
+              onPress={() => setShowStatusModal(false)}
+            >
+              <Text style={modalStyles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Remove Confirmation Modal */}
+      <Modal
+        visible={showRemoveModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRemoveModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Remove Job</Text>
+            <Text style={modalStyles.modalText}>Are you sure you want to remove this job from your bookmarks?</Text>
+
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowRemoveModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[modalStyles.button, modalStyles.deleteButton]} onPress={confirmRemove}>
+                <Text style={modalStyles.buttonText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mark as Completed Confirmation Modal */}
+      <Modal
+        visible={showCompleteModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCompleteModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Mark as Completed</Text>
+            <Text style={modalStyles.modalText}>Have you completed this application?</Text>
+
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowCompleteModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[modalStyles.button, modalStyles.saveButton]} onPress={confirmMarkAsCompleted}>
+                <Text style={modalStyles.buttonText}>Yes, Complete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Move to Active Confirmation Modal */}
+      <Modal
+        visible={showMoveToActiveModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowMoveToActiveModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Move to Active</Text>
+            <Text style={modalStyles.modalText}>Do you want to move this application back to active?</Text>
+
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowMoveToActiveModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[modalStyles.button, modalStyles.saveButton]} onPress={confirmMoveToActive}>
+                <Text style={modalStyles.buttonText}>Move to Active</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Success</Text>
+            <Text style={modalStyles.modalText}>{successMessage}</Text>
+
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.saveButton, { marginTop: 20 }]}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={modalStyles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        visible={showErrorModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Error</Text>
+            <Text style={modalStyles.modalText}>{errorMessage}</Text>
+
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.deleteButton, { marginTop: 20 }]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              <Text style={modalStyles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -540,7 +704,7 @@ const styles = StyleSheet.create({
 })
 
 // Web-specific styles for the date modal
-const webStyles = {
+const modalStyles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -566,6 +730,13 @@ const webStyles = {
     fontFamily: FONT.bold,
     fontSize: SIZES.large,
     color: COLORS.primary,
+    marginBottom: SIZES.medium,
+    textAlign: "center",
+  },
+  modalText: {
+    fontFamily: FONT.regular,
+    fontSize: SIZES.medium,
+    color: COLORS.secondary,
     marginBottom: SIZES.medium,
     textAlign: "center",
   },
@@ -604,12 +775,30 @@ const webStyles = {
   saveButton: {
     backgroundColor: COLORS.tertiary,
   },
+  deleteButton: {
+    backgroundColor: "#FF5C5C",
+  },
   buttonText: {
     fontFamily: FONT.bold,
     fontSize: SIZES.small,
     color: COLORS.white,
   },
-}
+  statusButtonsContainer: {
+    marginVertical: SIZES.medium,
+  },
+  statusButton: {
+    backgroundColor: COLORS.primary,
+    padding: SIZES.small,
+    borderRadius: SIZES.small,
+    marginBottom: SIZES.small,
+    alignItems: "center",
+  },
+  statusButtonText: {
+    fontFamily: FONT.medium,
+    fontSize: SIZES.medium,
+    color: COLORS.white,
+  },
+})
 
 export default BookmarkedJobCard
 

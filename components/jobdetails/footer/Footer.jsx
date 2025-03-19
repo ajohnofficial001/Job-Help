@@ -1,6 +1,6 @@
 "use client"
 
-import { View, Text, TouchableOpacity, Image, Linking, Alert, Platform, TextInput, Modal } from "react-native"
+import { View, Text, TouchableOpacity, Image, Linking, Modal, Platform, TextInput, StyleSheet } from "react-native"
 import { useState, useEffect } from "react"
 import styles from "./footer.style"
 import { icons } from "../../../constants"
@@ -25,6 +25,11 @@ const Footer = ({ url, job }) => {
   const [webDate, setWebDate] = useState("")
   const [showWebModal, setShowWebModal] = useState(false)
   const [jobData, setJobData] = useState(null)
+  const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
+  const [errorMessage, setErrorMessage] = useState("")
+  const [showErrorModal, setShowErrorModal] = useState(false)
 
   // Effect to ensure we have job data
   useEffect(() => {
@@ -39,17 +44,14 @@ const Footer = ({ url, job }) => {
   const handleBookmarkToggle = () => {
     if (!jobData) {
       console.error("No job data available for bookmarking")
-      if (Platform.OS === "web") {
-        window.alert("Cannot bookmark: Job data is not available")
-      } else {
-        Alert.alert("Error", "Cannot bookmark: Job data is not available")
-      }
+      setErrorMessage("Cannot bookmark: Job data is not available")
+      setShowErrorModal(true)
       return
     }
 
     if (isJobBookmarked) {
-      // Remove bookmark
-      handleRemoveBookmark()
+      // Remove bookmark - show confirmation modal
+      setShowRemoveModal(true)
     } else {
       // Add bookmark - show date picker based on platform
       if (Platform.OS === "web") {
@@ -66,10 +68,17 @@ const Footer = ({ url, job }) => {
     try {
       const result = await removeBookmark(jobData.job_id)
       if (!result.success) {
-        Alert.alert("Error", result.error || "Failed to remove bookmark")
+        setErrorMessage(result.error || "Failed to remove bookmark")
+        setShowErrorModal(true)
+      } else {
+        setSuccessMessage("Job removed from bookmarks")
+        setShowSuccessModal(true)
       }
     } catch (error) {
-      Alert.alert("Error", error.message || "An unexpected error occurred")
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
+    } finally {
+      setShowRemoveModal(false)
     }
   }
 
@@ -82,12 +91,15 @@ const Footer = ({ url, job }) => {
       const result = await addBookmark(jobData, date.toISOString(), notes)
 
       if (result.success) {
-        Alert.alert("Success", "Job bookmarked successfully!")
+        setSuccessMessage("Job bookmarked successfully!")
+        setShowSuccessModal(true)
       } else {
-        Alert.alert("Error", result.error || "Failed to bookmark job")
+        setErrorMessage(result.error || "Failed to bookmark job")
+        setShowErrorModal(true)
       }
     } catch (error) {
-      Alert.alert("Error", error.message || "An unexpected error occurred")
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
     }
   }
 
@@ -107,7 +119,8 @@ const Footer = ({ url, job }) => {
 
     if (!jobData) {
       console.error("No job data available")
-      window.alert("Error: No job data available")
+      setErrorMessage("Error: No job data available")
+      setShowErrorModal(true)
       return
     }
 
@@ -120,18 +133,11 @@ const Footer = ({ url, job }) => {
       console.log("Bookmark result:", result)
 
       if (result.success) {
-        // Use window.alert for web to ensure it's visible
-        if (Platform.OS === "web") {
-          window.alert("Job bookmarked successfully!")
-        } else {
-          Alert.alert("Success", "Job bookmarked successfully!")
-        }
+        setSuccessMessage("Job bookmarked successfully!")
+        setShowSuccessModal(true)
       } else {
-        if (Platform.OS === "web") {
-          window.alert(result.error || "Failed to bookmark job")
-        } else {
-          Alert.alert("Error", result.error || "Failed to bookmark job")
-        }
+        setErrorMessage(result.error || "Failed to bookmark job")
+        setShowErrorModal(true)
       }
 
       // Reset form
@@ -139,11 +145,8 @@ const Footer = ({ url, job }) => {
       setNotes("")
     } catch (error) {
       console.error("Error in handleWebDateSubmit:", error)
-      if (Platform.OS === "web") {
-        window.alert(error.message || "An unexpected error occurred")
-      } else {
-        Alert.alert("Error", error.message || "An unexpected error occurred")
-      }
+      setErrorMessage(error.message || "An unexpected error occurred")
+      setShowErrorModal(true)
     }
   }
 
@@ -173,59 +176,129 @@ const Footer = ({ url, job }) => {
       )}
 
       {/* Web Modal for date input */}
-      {Platform.OS === "web" && (
-        <Modal
-          visible={showWebModal}
-          transparent={true}
-          animationType="slide"
-          onRequestClose={() => setShowWebModal(false)}
-        >
-          <View style={webStyles.modalOverlay}>
-            <View style={webStyles.modalContent}>
-              <Text style={webStyles.modalTitle}>Bookmark Job</Text>
+      <Modal
+        visible={showWebModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowWebModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Bookmark Job</Text>
 
-              <Text style={webStyles.label}>Application Deadline (Optional)</Text>
-              <TextInput
-                style={webStyles.input}
-                placeholder="YYYY-MM-DD"
-                value={webDate}
-                onChangeText={setWebDate}
-                // On web, use the native date input
-                {...(Platform.OS === "web" ? { type: "date" } : {})}
-              />
+            <Text style={modalStyles.label}>Application Deadline (Optional)</Text>
+            <TextInput
+              style={modalStyles.input}
+              placeholder="YYYY-MM-DD"
+              value={webDate}
+              onChangeText={setWebDate}
+              // On web, use the native date input
+              {...(Platform.OS === "web" ? { type: "date" } : {})}
+            />
 
-              <Text style={webStyles.label}>Notes (Optional)</Text>
-              <TextInput
-                style={[webStyles.input, webStyles.textArea]}
-                placeholder="Add notes about this job..."
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={3}
-              />
+            <Text style={modalStyles.label}>Notes (Optional)</Text>
+            <TextInput
+              style={[modalStyles.input, modalStyles.textArea]}
+              placeholder="Add notes about this job..."
+              value={notes}
+              onChangeText={setNotes}
+              multiline
+              numberOfLines={3}
+            />
 
-              <View style={webStyles.buttonContainer}>
-                <TouchableOpacity
-                  style={[webStyles.button, webStyles.cancelButton]}
-                  onPress={() => setShowWebModal(false)}
-                >
-                  <Text style={webStyles.buttonText}>Cancel</Text>
-                </TouchableOpacity>
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowWebModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity style={[webStyles.button, webStyles.saveButton]} onPress={handleWebDateSubmit}>
-                  <Text style={webStyles.buttonText}>Save</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={[modalStyles.button, modalStyles.saveButton]} onPress={handleWebDateSubmit}>
+                <Text style={modalStyles.buttonText}>Save</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      )}
+        </View>
+      </Modal>
+
+      {/* Remove Bookmark Confirmation Modal */}
+      <Modal
+        visible={showRemoveModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRemoveModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Remove Bookmark</Text>
+            <Text style={modalStyles.modalText}>Are you sure you want to remove this job from your bookmarks?</Text>
+
+            <View style={modalStyles.buttonContainer}>
+              <TouchableOpacity
+                style={[modalStyles.button, modalStyles.cancelButton]}
+                onPress={() => setShowRemoveModal(false)}
+              >
+                <Text style={modalStyles.buttonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[modalStyles.button, modalStyles.deleteButton]} onPress={handleRemoveBookmark}>
+                <Text style={modalStyles.buttonText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Success</Text>
+            <Text style={modalStyles.modalText}>{successMessage}</Text>
+
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.saveButton, { marginTop: 20 }]}
+              onPress={() => setShowSuccessModal(false)}
+            >
+              <Text style={modalStyles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Error Modal */}
+      <Modal
+        visible={showErrorModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowErrorModal(false)}
+      >
+        <View style={modalStyles.modalOverlay}>
+          <View style={modalStyles.modalContent}>
+            <Text style={modalStyles.modalTitle}>Error</Text>
+            <Text style={modalStyles.modalText}>{errorMessage}</Text>
+
+            <TouchableOpacity
+              style={[modalStyles.button, modalStyles.deleteButton, { marginTop: 20 }]}
+              onPress={() => setShowErrorModal(false)}
+            >
+              <Text style={modalStyles.buttonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
 
-// Additional styles for the web modal
-const webStyles = {
+// Additional styles for the modals
+const modalStyles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "center",
@@ -251,6 +324,13 @@ const webStyles = {
     fontFamily: FONT.bold,
     fontSize: SIZES.large,
     color: COLORS.primary,
+    marginBottom: SIZES.medium,
+    textAlign: "center",
+  },
+  modalText: {
+    fontFamily: FONT.regular,
+    fontSize: SIZES.medium,
+    color: COLORS.secondary,
     marginBottom: SIZES.medium,
     textAlign: "center",
   },
@@ -290,12 +370,15 @@ const webStyles = {
   saveButton: {
     backgroundColor: COLORS.tertiary,
   },
+  deleteButton: {
+    backgroundColor: "#FF5C5C",
+  },
   buttonText: {
     fontFamily: FONT.bold,
     fontSize: SIZES.medium,
     color: COLORS.white,
   },
-}
+})
 
 export default Footer
 

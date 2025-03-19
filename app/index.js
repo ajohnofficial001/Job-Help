@@ -4,7 +4,7 @@ import { View, ScrollView, SafeAreaView, ActivityIndicator, Image, TouchableOpac
 import { useState, useEffect } from "react"
 import { Stack, useRouter } from "expo-router"
 
-import { COLORS, icons, SIZES, SHADOWS } from "../constants"
+import { COLORS, icons, SIZES, SHADOWS, images } from "../constants"
 import { Nearbyjobs, Popularjobs, ScreenHeaderBtn, Welcome } from "../components"
 import { useAuth } from "../context/AuthContext"
 import { useTheme } from "../context/ThemeContext"
@@ -75,7 +75,7 @@ const Home = () => {
         options={{
           headerStyle: { backgroundColor: darkMode ? colors.background : COLORS.lightWhite },
           headerShadowVisible: false,
-          headerLeft: () => <ScreenHeaderBtn iconUrl={icons.menu} dimension="60%" />,
+          headerLeft: () => <Image source={icons.logo} style={{ width: "8rem", resizeMode: "contain" }} />,
           headerRight: () => (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <TouchableOpacity

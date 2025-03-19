@@ -18,21 +18,29 @@ import { COLORS, FONT, SIZES, SHADOWS, icons } from "../../constants"
 import { useTheme } from "../../context/ThemeContext"
 import { useAuth } from "../../context/AuthContext"
 import ChatMessage from "./ChatMessage"
+import VoiceIndicator from "./VoiceIndicator"
 import { generateChatResponse } from "../../services/chatbotService"
+import * as Permissions from "expo-permissions"
+// Replace the import for Voice with a platform-specific import
+// Only import Voice on native platforms
+const Voice = Platform.OS !== "web" ? require("@react-native-voice/voice").default : null
 
+// Now let's modify the ChatbotOverlay component to include voice recognition
 const ChatbotOverlay = ({ isVisible, onClose }) => {
   const { darkMode, colors } = useTheme()
   const { user } = useAuth()
   const [messages, setMessages] = useState([
     {
       id: "1",
-      text: "Hi there! I'm your JobHelp assistant. I can help you find jobs matching your skills or improve your resume. What can I help you with today?",
+      text: "Hi there! I'm your NextUp assistant. I can help you find jobs matching your skills or improve your resume. What can I help you with today?",
       isUser: false,
       timestamp: new Date(),
     },
   ])
   const [inputText, setInputText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [speechResults, setSpeechResults] = useState([])
   const slideAnim = useRef(new Animated.Value(isVisible ? 0 : 500)).current
   const fadeAnim = useRef(new Animated.Value(isVisible ? 1 : 0)).current
   const flatListRef = useRef(null)
@@ -45,6 +53,7 @@ const ChatbotOverlay = ({ isVisible, onClose }) => {
     "Salary negotiation advice",
   ]
 
+  // Replace the useEffect for voice setup with this platform-aware version
   useEffect(() => {
     if (isVisible) {
       Animated.parallel([
@@ -73,7 +82,155 @@ const ChatbotOverlay = ({ isVisible, onClose }) => {
         }),
       ]).start()
     }
+
+    // Set up voice recognition only on native platforms
+    if (Platform.OS !== "web" && Voice) {
+      try {
+        Voice.onSpeechStart = onSpeechStart
+        Voice.onSpeechEnd = onSpeechEnd
+        Voice.onSpeechResults = onSpeechResults
+        Voice.onSpeechError = onSpeechError
+      } catch (e) {
+        console.error("Failed to set up Voice event handlers:", e)
+      }
+
+      return () => {
+        // Clean up voice recognition only on native platforms
+        try {
+          Voice.destroy().then(() => {
+            try {
+              Voice.removeAllListeners()
+            } catch (e) {
+              console.error("Failed to remove Voice listeners:", e)
+            }
+          })
+        } catch (e) {
+          console.error("Failed to destroy Voice:", e)
+        }
+      }
+    }
   }, [isVisible, slideAnim, fadeAnim])
+
+  // Voice recognition handlers
+  const onSpeechStart = () => {
+    console.log("Speech recognition started")
+  }
+
+  const onSpeechEnd = () => {
+    setIsRecording(false)
+    console.log("Speech recognition ended")
+  }
+
+  const onSpeechResults = (e) => {
+    if (e.value && e.value.length > 0) {
+      setSpeechResults(e.value)
+      setInputText(e.value[0]) // Set the first (most likely) result as input text
+    }
+    console.log("Speech results:", e)
+  }
+
+  const onSpeechError = (e) => {
+    console.error("Speech recognition error:", e)
+    setIsRecording(false)
+  }
+
+  // Replace the startRecording function with this platform-aware version
+  const startRecording = async () => {
+    try {
+      if (Platform.OS === "web") {
+        // Use Web Speech API for web
+        if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+          console.error("Speech recognition not supported in this browser")
+          return
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+        const recognition = new SpeechRecognition()
+        recognition.lang = "en-US"
+        recognition.interimResults = false
+
+        recognition.onstart = () => {
+          setIsRecording(true)
+          console.log("Web speech recognition started")
+        }
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript
+          setInputText(transcript)
+          console.log("Web speech result:", transcript)
+        }
+
+        recognition.onerror = (event) => {
+          console.error("Web speech recognition error:", event.error)
+          setIsRecording(false)
+        }
+
+        recognition.onend = () => {
+          setIsRecording(false)
+          console.log("Web speech recognition ended")
+        }
+
+        recognition.start()
+        window.currentRecognition = recognition // Store reference for cleanup
+      } else if (Voice) {
+        // Use React Native Voice for native platforms
+        if (Platform.OS === "android") {
+          try {
+            const granted = await Permissions.askAsync(Permissions.AUDIO_RECORDING)
+            if (granted.status !== "granted") {
+              console.error("Permission to record audio was denied")
+              return
+            }
+          } catch (error) {
+            console.error("Error requesting audio permission:", error)
+            return
+          }
+        }
+
+        try {
+          await Voice.start("en-US")
+          setIsRecording(true)
+          setSpeechResults([])
+        } catch (error) {
+          console.error("Error starting voice recognition:", error)
+          setIsRecording(false)
+        }
+      } else {
+        console.error("Voice recognition not available on this platform")
+      }
+    } catch (error) {
+      console.error("Unexpected error in startRecording:", error)
+      setIsRecording(false)
+    }
+  }
+
+  // Replace the stopRecording function with this platform-aware version
+  const stopRecording = async () => {
+    try {
+      if (Platform.OS === "web") {
+        // Stop Web Speech API for web
+        if (window.currentRecognition) {
+          window.currentRecognition.stop()
+          delete window.currentRecognition
+        }
+      } else if (Voice) {
+        // Use React Native Voice for native platforms
+        await Voice.stop()
+      }
+      setIsRecording(false)
+    } catch (error) {
+      console.error("Error stopping voice recognition:", error)
+      setIsRecording(false)
+    }
+  }
+
+  const handleVoiceInput = () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }
 
   const handleSendMessage = async () => {
     if (inputText.trim() === "") return
@@ -128,6 +285,21 @@ const ChatbotOverlay = ({ isVisible, onClose }) => {
     // Optional: automatically send the suggested question
     // setTimeout(() => handleSendMessage(), 100);
   }
+
+  // Add this cleanup function to the component
+  useEffect(() => {
+    return () => {
+      // Clean up web speech recognition if active
+      if (Platform.OS === "web" && window.currentRecognition) {
+        try {
+          window.currentRecognition.stop()
+          delete window.currentRecognition
+        } catch (e) {
+          console.error("Error cleaning up web speech recognition:", e)
+        }
+      }
+    }
+  }, [])
 
   return (
     <Animated.View
@@ -200,13 +372,30 @@ const ChatbotOverlay = ({ isVisible, onClose }) => {
           {/* Input Area */}
           <View style={[styles.inputContainer, { backgroundColor: darkMode ? colors.surface : COLORS.white }]}>
             <TextInput
-              style={[styles.input, { color: darkMode ? colors.text : COLORS.primary }]}
-              placeholder="Type your message..."
+              style={[
+                styles.input,
+                { color: darkMode ? colors.text : COLORS.primary },
+                isRecording && styles.recordingInput,
+              ]}
+              placeholder={isRecording ? "Listening..." : "Type your message..."}
               placeholderTextColor={darkMode ? colors.textSecondary : COLORS.gray}
               value={inputText}
               onChangeText={setInputText}
               multiline
             />
+
+            {/* Voice Input Button */}
+            <TouchableOpacity
+              style={[styles.voiceButton, isRecording && styles.recordingButton]}
+              onPress={handleVoiceInput}
+            >
+              {isRecording ? (
+                <VoiceIndicator isRecording={isRecording} />
+              ) : (
+                <Image source={icons.microphone} style={[styles.voiceIcon, { backgroundColor: COLORS.white }]} />
+              )}
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[styles.sendButton, { opacity: inputText.trim() === "" ? 0.5 : 1 }]}
               onPress={handleSendMessage}
@@ -228,6 +417,7 @@ const ChatbotOverlay = ({ isVisible, onClose }) => {
   )
 }
 
+// Update the styles to include new voice input related styles
 const styles = StyleSheet.create({
   overlay: {
     position: "absolute",
@@ -336,6 +526,10 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gray2,
     marginRight: SIZES.small,
   },
+  recordingInput: {
+    borderColor: COLORS.tertiary,
+    borderWidth: 2,
+  },
   sendButton: {
     width: 40,
     height: 40,
@@ -347,6 +541,24 @@ const styles = StyleSheet.create({
   sendIcon: {
     width: 20,
     height: 20,
+  },
+  voiceButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: SIZES.small,
+  },
+  recordingButton: {
+    backgroundColor: COLORS.white,
+    borderWidth: 2,
+    borderColor: COLORS.tertiary,
+  },
+  voiceIcon: {
+    width: 45,
+    height: 45,
   },
 })
 
