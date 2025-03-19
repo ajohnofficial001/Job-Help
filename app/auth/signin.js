@@ -123,7 +123,7 @@ const SignIn = () => {
               style={styles.logoImage}
               resizeMode="contain"
             />
-            <Text style={[styles.logoText, { color: darkMode ? colors.text : COLORS.primary }]}>Job Finder</Text>
+            <Text style={[styles.logoText, { color: darkMode ? colors.text : COLORS.primary }]}>NextUp</Text>
           </View>
 
           <Text style={[styles.title, { color: darkMode ? colors.text : COLORS.primary }]}>Sign In</Text>

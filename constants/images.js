@@ -1,5 +1,7 @@
-import profile from "../assets/images/kemal.jpg";
+import profile from "../assets/images/default.jpg";
+import logo from "../assets/images/logo.png";
 
 export default {
-  profile,
+  profile, 
+  logo,
 };

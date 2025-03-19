@@ -173,12 +173,12 @@ const SignUp = () => {
                 style={styles.logoImage}
                 resizeMode="contain"
               />
-              <Text style={[styles.logoText, { color: darkMode ? colors.text : COLORS.primary }]}>Job Finder</Text>
+              <Text style={[styles.logoText, { color: darkMode ? colors.text : COLORS.primary }]}>NextUp</Text>
             </View>
 
             <Text style={[styles.title, { color: darkMode ? colors.text : COLORS.primary }]}>Create Account</Text>
             <Text style={[styles.subtitle, { color: darkMode ? colors.textSecondary : COLORS.gray }]}>
-              Sign up to get started with Job Finder
+              Sign up to get started with NextUp
             </Text>
 
             <View style={styles.formContainer}>
